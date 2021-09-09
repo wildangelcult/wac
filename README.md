@@ -1,4 +1,6 @@
 WAC - Wild Angel Cult
 ======================
 
-TODO:
+### TODO:
+- OOP
+- optimization
