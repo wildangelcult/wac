@@ -2,7 +2,7 @@ CC := gcc
 MKDIR := mkdir -p
 
 DFLAGS := -g3 -ggdb
-CFLAGS := -Wall -MMD -MP $(DFLAGS)
+CFLAGS := -Wall -std=c99 -pedantic -MMD -MP $(DFLAGS)
 
 SDIR := src
 ODIR := obj
