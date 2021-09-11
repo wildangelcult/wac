@@ -2,6 +2,7 @@
 #define __WAC_OBJECT_H
 
 #include "wac_common.h"
+#include "wac_state.h"
 #include "wac_page.h"
 #include "wac_value.h"
 

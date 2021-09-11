@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #include "wac_memory.h"
+#include "wac_object.h"
 
 #ifdef WAC_DEBUG_GC_LOG
 #include "wac_debug.h"
