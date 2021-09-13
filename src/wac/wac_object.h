@@ -13,11 +13,11 @@ typedef enum wac_obj_type_e {
 	WAC_OBJ_UPVAL,
 } wac_obj_type_t;
 
-typedef struct wac_obj_s {
+struct wac_obj_s {
 	wac_obj_type_t type;
 	bool isMarked;
 	struct wac_obj_s *next;
-} wac_obj_t;
+};
 
 typedef struct wac_obj_string_s {
 	wac_obj_t obj;

@@ -15,7 +15,7 @@ typedef struct wac_frame_s {
 	wac_value_t *bp;
 } wac_frame_t;
 
-typedef struct wac_vm_s {
+struct wac_vm_s {
 	size_t frames_asize, frames_usize;
 	wac_frame_t *frames;
 
@@ -32,7 +32,7 @@ typedef struct wac_vm_s {
 
 	size_t grays_asize, grays_usize;
 	wac_obj_t **grays;
-} wac_vm_t;
+};
 
 
 typedef enum wac_interpretResult_e {
