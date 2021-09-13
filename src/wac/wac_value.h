@@ -2,7 +2,8 @@
 #define __WAC_VALUE_H
 
 #include "wac_common.h"
-#include "wac_object.h"
+
+typedef struct wac_obj_s wac_obj_t;
 
 typedef enum wac_value_type_e {
 	WAC_VAL_TYPE_NULL,

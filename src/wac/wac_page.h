@@ -4,6 +4,8 @@
 #include "wac_common.h"
 #include "wac_value.h"
 
+typedef struct wac_vm_s wac_vm_t;
+
 typedef enum wac_opCode_e {
 	WAC_OP_CONST,
 	WAC_OP_NULL,
