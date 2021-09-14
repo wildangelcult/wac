@@ -51,8 +51,8 @@ wac_obj_string_t* wac_table_find_string(wac_table_t *table, const char *buf, siz
 	for (;;) {
 		entry = &table->entries[index];
 
-		if (!entry->key || WAC_VAL_IS_NULL(entry->value)) {
-			return NULL;
+		if (!entry->key) {
+			if (WAC_VAL_IS_NULL(entry->value)) return NULL;
 		} else if (entry->key->len == len && entry->key->hash == hash && !memcmp(entry->key->buf, buf, len)) {
 			return entry->key;
 		}
