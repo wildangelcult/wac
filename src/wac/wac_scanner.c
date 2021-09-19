@@ -156,6 +156,8 @@ wac_token_t wac_scanner_token_next(wac_scanner_t *scanner) {
 		case ')': return wac_scanner_token_make(scanner, WAC_TOKEN_RPAREN);
 		case '{': return wac_scanner_token_make(scanner, WAC_TOKEN_LCURLY);
 		case '}': return wac_scanner_token_make(scanner, WAC_TOKEN_RCURLY);
+		case '[': return wac_scanner_token_make(scanner, WAC_TOKEN_LSQUARE);
+		case ']': return wac_scanner_token_make(scanner, WAC_TOKEN_RSQUARE);
 		case ',': return wac_scanner_token_make(scanner, WAC_TOKEN_COMMA);
 		case '.': return wac_scanner_token_make(scanner, WAC_TOKEN_DOT);
 		case '+': return wac_scanner_token_make(scanner, WAC_TOKEN_PLUS);

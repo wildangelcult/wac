@@ -1,21 +1,24 @@
 #ifndef __WAC_TABLE_H
 #define __WAC_TABLE_H
 
+typedef struct wac_table_entry_s wac_table_entry_t;
+
+typedef struct wac_table_s {
+	size_t asize, usize;
+	wac_table_entry_t *entries;
+} wac_table_t;
+
 #include "wac_common.h"
 #include "wac_value.h"
 #include "wac_object.h"
 
 #define WAC_TABLE_MAX_LOAD 0.75
 
-typedef struct wac_table_entry_s {
+struct wac_table_entry_s {
 	wac_obj_string_t *key;
 	wac_value_t value;
-} wac_table_entry_t;
+};
 
-typedef struct wac_table_s {
-	size_t asize, usize;
-	wac_table_entry_t *entries;
-} wac_table_t;
 
 void wac_table_init(wac_state_t *state, wac_table_t *table);
 wac_obj_string_t* wac_table_find_string(wac_table_t *table, const char *buf, size_t len, uint32_t hash);

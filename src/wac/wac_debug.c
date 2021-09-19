@@ -59,6 +59,8 @@ size_t wac_inst_disass(wac_page_t *page, size_t address) {
 			return address;
 #undef WAC_READ_4_BYTES
 		}
+		case WAC_OP_CLASS:
+			return wac_inst_const("WAC_OP_CLASS", address, page);
 		case WAC_OP_POP:
 			return wac_inst_simple("WAC_OP_POP", address);
 		case WAC_OP_POPN:
@@ -75,6 +77,10 @@ size_t wac_inst_disass(wac_page_t *page, size_t address) {
 			return wac_inst_const("WAC_OP_GET_GLOBAL", address, page);
 		case WAC_OP_SET_GLOBAL:
 			return wac_inst_const("WAC_OP_SET_GLOBAL", address, page);
+		case WAC_OP_GET_PROPERTY:
+			return wac_inst_simple("WAC_OP_GET_PROPERTY", address);
+		case WAC_OP_SET_PROPERTY:
+			return wac_inst_simple("WAC_OP_SET_PROPERTY", address);
 		case WAC_OP_CLOSE_UPVAL:
 			return wac_inst_simple("WAC_OP_CLOSE_UPVAL", address);
 		case WAC_OP_DEFINE_GLOBAL:

@@ -89,6 +89,12 @@ void wac_obj_print(wac_value_t value) {
 		case WAC_OBJ_UPVAL:
 			printf("<upval>");
 			break;
+		case WAC_OBJ_CLASS:
+			printf("<class %s>", WAC_OBJ_AS_CLASS(value)->name->buf);
+			break;
+		case WAC_OBJ_INSTANCE:
+			printf("<instance of %s>", WAC_OBJ_AS_INSTANCE(value)->klass->name->buf);
+			break;
 	}
 }
 
@@ -132,6 +138,21 @@ wac_obj_upval_t* wac_obj_upval_init(wac_state_t *state, wac_value_t *loc) {
 	return upval;
 }
 
+wac_obj_class_t* wac_obj_class_init(wac_state_t *state, wac_obj_string_t *name) {
+	wac_obj_class_t *klass = WAC_OBJ_ALLOC(wac_obj_class_t, WAC_OBJ_CLASS);
+	klass->name = name;
+	return klass;
+}
+
+wac_obj_instance_t* wac_obj_instance_init(wac_state_t *state, wac_obj_class_t *klass) {
+	wac_obj_instance_t *instance = WAC_OBJ_ALLOC(wac_obj_instance_t, WAC_OBJ_INSTANCE);
+	instance->klass = klass;
+	wac_vm_push(&state->vm, WAC_VAL_OBJ(instance));
+	wac_table_init(state, &instance->fields);
+	wac_vm_pop(&state->vm);
+	return instance;
+}
+
 void wac_obj_free(wac_state_t *state, wac_obj_t *obj) {
 #ifdef WAC_DEBUG_GC_LOG
 	printf("[*] Freed object %p of type %d\n", obj, obj->type);
@@ -160,6 +181,14 @@ void wac_obj_free(wac_state_t *state, wac_obj_t *obj) {
 		}
 		case WAC_OBJ_UPVAL:
 			WAC_FREE(state, wac_obj_upval_t, obj);
+			break;
+		case WAC_OBJ_CLASS: {
+			WAC_FREE(state, wac_obj_class_t, obj);
+			break;
+		}
+		case WAC_OBJ_INSTANCE:
+			wac_table_free(state, &((wac_obj_instance_t*)obj)->fields);
+			WAC_FREE(state, wac_obj_instance_t, obj);
 			break;
 	}
 }

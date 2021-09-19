@@ -187,6 +187,11 @@ static bool wac_vm_call_value(wac_state_t *state, wac_value_t callee, uint32_t a
 			}
 			case WAC_OBJ_CLOSURE:
 				return wac_vm_call(state, WAC_OBJ_AS_CLOSURE(callee), argc);
+			case WAC_OBJ_CLASS: {
+				wac_obj_class_t *klass = WAC_OBJ_AS_CLASS(callee);
+				state->vm.sp[-argc - 1] = WAC_VAL_OBJ(wac_obj_instance_init(state, klass));
+				return true;
+			}
 			default:
 				break;
 		}
@@ -304,6 +309,9 @@ static wac_interpretResult_t wac_vm_run(wac_state_t *state) {
 				}
 				break;
 			}
+			case WAC_OP_CLASS:
+				wac_vm_push(vm, WAC_VAL_OBJ(wac_obj_class_init(state, WAC_READ_STRING())));
+				break;
 			case WAC_OP_POP:
 				wac_vm_pop(vm);
 				break;
@@ -351,6 +359,44 @@ static wac_interpretResult_t wac_vm_run(wac_state_t *state) {
 					wac_vm_error(vm, "Undefined variable '%s'", name->buf);
 					return WAC_INTERPRET_RUNTIME_ERROR;
 				}
+				break;
+			}
+			case WAC_OP_GET_PROPERTY: {
+				if (!WAC_OBJ_IS_INSTANCE(wac_vm_peek(vm, 1))) {
+					wac_vm_error(vm, "Only instances have properties");
+					return WAC_INTERPRET_RUNTIME_ERROR;
+				}
+				if (!WAC_OBJ_IS_STRING(wac_vm_peek(vm, 0))) {
+					wac_vm_error(vm, "You can only use string to access properties");
+					return WAC_INTERPRET_RUNTIME_ERROR;
+				}
+				wac_obj_instance_t *instance = WAC_OBJ_AS_INSTANCE(wac_vm_peek(vm, 1));
+				wac_obj_string_t *name = WAC_OBJ_AS_STRING(wac_vm_peek(vm, 0));
+				wac_value_t value;
+				if (wac_table_get(&instance->fields, name, &value)) {
+					wac_vm_pop(vm);
+					wac_vm_pop(vm);
+					wac_vm_push(vm, value);
+					break;
+				}
+				wac_vm_error(vm, "Undefined property '%s'", name->buf);
+				return WAC_INTERPRET_RUNTIME_ERROR;
+			}
+			case WAC_OP_SET_PROPERTY: {
+				if (!WAC_OBJ_IS_INSTANCE(wac_vm_peek(vm, 2))) {
+					wac_vm_error(vm, "Only instances have fields");
+					return WAC_INTERPRET_RUNTIME_ERROR;
+				}
+				if (!WAC_OBJ_IS_STRING(wac_vm_peek(vm, 1))) {
+					wac_vm_error(vm, "You can only use string to access fields");
+					return WAC_INTERPRET_RUNTIME_ERROR;
+				}
+				wac_obj_instance_t *instance = WAC_OBJ_AS_INSTANCE(wac_vm_peek(vm, 2));
+				wac_table_set(state, &instance->fields, WAC_OBJ_AS_STRING(wac_vm_peek(vm, 1)), wac_vm_peek(vm, 0));
+				wac_value_t value = wac_vm_pop(vm);
+				wac_vm_pop(vm);
+				wac_vm_pop(vm);
+				wac_vm_push(vm, value);
 				break;
 			}
 			case WAC_OP_CLOSE_UPVAL:

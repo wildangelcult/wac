@@ -103,6 +103,17 @@ static void wac_gc_blacken(wac_vm_t *vm, wac_obj_t *obj) {
 		case WAC_OBJ_UPVAL:
 			wac_gc_mark_value(vm, ((wac_obj_upval_t*)obj)->closed);
 			break;
+		case WAC_OBJ_CLASS: {
+			wac_obj_class_t *klass = (wac_obj_class_t*)obj;
+			wac_gc_mark_obj(vm, (wac_obj_t*)klass->name);
+			break;
+		}
+		case WAC_OBJ_INSTANCE: {
+			wac_obj_instance_t *instance = (wac_obj_instance_t*)obj;
+			wac_gc_mark_obj(vm, (wac_obj_t*)instance->klass);
+			wac_gc_mark_table(vm, &instance->fields);
+			break;
+		}
 	}
 }
 

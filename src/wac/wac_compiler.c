@@ -52,14 +52,18 @@ static void wac_parser_variable(wac_state_t *state, bool canAssign);
 static void wac_parser_and(wac_state_t *state, bool canAssign);
 static void wac_parser_or(wac_state_t *state, bool canAssign);
 static void wac_parser_call(wac_state_t *state, bool canAssign);
+static void wac_parser_dot(wac_state_t *state, bool canAssign);
+static void wac_parser_square(wac_state_t *state, bool canAssign);
 
 static wac_parser_rule_t wac_parser_rules[] = {
 	[WAC_TOKEN_LPAREN]		= {wac_parser_group,	wac_parser_call,	WAC_PREC_CALL},
 	[WAC_TOKEN_RPAREN]		= {NULL,		NULL,			WAC_PREC_NONE},
 	[WAC_TOKEN_LCURLY]		= {NULL,		NULL,			WAC_PREC_NONE},
 	[WAC_TOKEN_RCURLY]		= {NULL,		NULL,			WAC_PREC_NONE},
+	[WAC_TOKEN_LSQUARE]		= {NULL,		wac_parser_square,	WAC_PREC_CALL},
+	[WAC_TOKEN_RSQUARE]		= {NULL,		NULL,			WAC_PREC_NONE},
 	[WAC_TOKEN_COMMA]		= {NULL,		NULL,			WAC_PREC_NONE},
-	[WAC_TOKEN_DOT]			= {NULL,		NULL,			WAC_PREC_NONE},
+	[WAC_TOKEN_DOT]			= {NULL,		wac_parser_dot,		WAC_PREC_CALL},
 	[WAC_TOKEN_PLUS]		= {wac_parser_unary,	wac_parser_binary,	WAC_PREC_TERM},
 	[WAC_TOKEN_MINUS]		= {wac_parser_unary,	wac_parser_binary,	WAC_PREC_TERM},
 	[WAC_TOKEN_STAR]		= {NULL,		wac_parser_binary,	WAC_PREC_FACT},
@@ -660,11 +664,23 @@ static void wac_parser_decl_fun(wac_state_t *state) {
 	wac_parser_var_define(state, var);
 }
 
+static void wac_parser_decl_class(wac_state_t *state) {
+	wac_parser_eat(state, WAC_TOKEN_ID, "Expected class name");
+	uint32_t name = wac_parser_const_id(state, &state->parser.prev);
+	wac_parser_decl_local(state);
+	wac_compiler_emit_5bytes(state, WAC_OP_CLASS, name);
+	wac_parser_var_define(state, name);
+	wac_parser_eat(state, WAC_TOKEN_LCURLY, "Expected '{' before class body");
+	wac_parser_eat(state, WAC_TOKEN_RCURLY, "Expected '}' after class body");
+}
+
 static void wac_parser_decl(wac_state_t *state) {
 	if (wac_parser_match(state, WAC_TOKEN_VAR)) {
 		wac_parser_decl_var(state);
 	} else if (wac_parser_match(state, WAC_TOKEN_FUN)) {
 		wac_parser_decl_fun(state);
+	} else if (wac_parser_match(state, WAC_TOKEN_CLASS)) {
+		wac_parser_decl_class(state);
 	} else {
 		wac_parser_statement(state);
 	}
@@ -734,6 +750,30 @@ static uint32_t wac_parser_argc(wac_state_t *state) {
 
 static void wac_parser_call(wac_state_t *state, bool canAssign) {
 	wac_compiler_emit_5bytes(state, WAC_OP_CALL, wac_parser_argc(state));
+}
+
+static void wac_parser_dot(wac_state_t *state, bool canAssign) {
+	wac_parser_eat(state, WAC_TOKEN_ID, "Expected property name after '.'");
+	wac_compiler_emit_5bytes(state, WAC_OP_CONST, wac_parser_const_id(state, &state->parser.prev));
+
+	if (canAssign && wac_parser_match(state, WAC_TOKEN_EQUAL)) {
+		wac_parser_expr(state);
+		wac_compiler_emit_byte(state, WAC_OP_SET_PROPERTY);
+	} else {
+		wac_compiler_emit_byte(state, WAC_OP_GET_PROPERTY);
+	}
+}
+
+static void wac_parser_square(wac_state_t *state, bool canAssign) {
+	wac_parser_expr(state);
+
+	if (canAssign && wac_parser_match(state, WAC_TOKEN_EQUAL)) {
+		wac_parser_expr(state);
+		wac_compiler_emit_byte(state, WAC_OP_SET_PROPERTY);
+	} else {
+		wac_compiler_emit_byte(state, WAC_OP_GET_PROPERTY);
+	}
+	wac_parser_eat(state, WAC_TOKEN_RSQUARE, "Expected ']' after expresion");
 }
 
 wac_obj_fun_t* wac_compiler_compile(wac_state_t *state, const char *src) {
