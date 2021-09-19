@@ -317,7 +317,7 @@ static wac_interpretResult_t wac_vm_run(wac_state_t *state) {
 				vm->sp -= n;
 			}
 #else
-				vm->sp -= WAC_READ_CONST();
+				vm->sp -= WAC_READ_4_BYTES();
 #endif
 				break;
 			case WAC_OP_GET_LOCAL:

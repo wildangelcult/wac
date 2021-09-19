@@ -1,7 +1,7 @@
 CC := gcc
 MKDIR := mkdir -p
 
-DFLAGS := -g3 -ggdb
+DFLAGS := -g3 -ggdb -O0 -DWAC_DEBUG_ALL
 CFLAGS := -Wall -std=c99 -pedantic -MMD -MP $(DFLAGS)
 
 SDIR := src
