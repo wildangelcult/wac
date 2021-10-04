@@ -6,4 +6,3 @@ WAC - Wild Angel Cult
 - optimization
 
 ### Dev notes:
-make every header file have only forward decls to typedef structs and the structs be in the impl files

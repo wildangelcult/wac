@@ -61,6 +61,8 @@ size_t wac_inst_disass(wac_page_t *page, size_t address) {
 		}
 		case WAC_OP_CLASS:
 			return wac_inst_const("WAC_OP_CLASS", address, page);
+		case WAC_OP_METHOD:
+			return wac_inst_const("WAC_OP_METHOD", address, page);
 		case WAC_OP_POP:
 			return wac_inst_simple("WAC_OP_POP", address);
 		case WAC_OP_POPN:
@@ -113,6 +115,8 @@ size_t wac_inst_disass(wac_page_t *page, size_t address) {
 			return wac_inst_jmp_forw("WAC_OP_JMP_FALSE", address, page);
 		case WAC_OP_CALL:
 			return wac_inst_bytes("WAC_OP_CALL", address, page);
+		case WAC_OP_INVOKE:
+			return wac_inst_bytes("WAC_OP_INVOKE", address, page);
 		case WAC_OP_RET:
 			return wac_inst_simple("WAC_OP_RET", address);
 		default:

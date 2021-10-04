@@ -19,6 +19,8 @@ typedef struct wac_local_s {
 typedef enum wac_fun_type_e {
 	WAC_FUN_TYPE_SCRIPT,
 	WAC_FUN_TYPE_FUN,
+	WAC_FUN_TYPE_METHOD,
+	WAC_FUN_TYPE_INIT,
 } wac_fun_type_t;
 
 typedef struct wac_upval_s {
@@ -40,6 +42,10 @@ typedef struct wac_compiler_s {
 
 	unsigned int scopeDepth;
 } wac_compiler_t;
+
+typedef struct wac_class_compiler_s {
+	struct wac_class_compiler_s *prev;
+} wac_class_compiler_t;
 
 wac_obj_fun_t* wac_compiler_compile(wac_state_t *state, const char *src);
 

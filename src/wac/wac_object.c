@@ -95,6 +95,9 @@ void wac_obj_print(wac_value_t value) {
 		case WAC_OBJ_INSTANCE:
 			printf("<instance of %s>", WAC_OBJ_AS_INSTANCE(value)->klass->name->buf);
 			break;
+		case WAC_OBJ_BOUND:
+			wac_obj_fun_print(WAC_OBJ_AS_BOUND(value)->method->fun);
+			break;
 	}
 }
 
@@ -141,6 +144,9 @@ wac_obj_upval_t* wac_obj_upval_init(wac_state_t *state, wac_value_t *loc) {
 wac_obj_class_t* wac_obj_class_init(wac_state_t *state, wac_obj_string_t *name) {
 	wac_obj_class_t *klass = WAC_OBJ_ALLOC(wac_obj_class_t, WAC_OBJ_CLASS);
 	klass->name = name;
+	wac_vm_push(&state->vm, WAC_VAL_OBJ(klass));
+	wac_table_init(state, &klass->methods);
+	wac_vm_pop(&state->vm);
 	return klass;
 }
 
@@ -151,6 +157,13 @@ wac_obj_instance_t* wac_obj_instance_init(wac_state_t *state, wac_obj_class_t *k
 	wac_table_init(state, &instance->fields);
 	wac_vm_pop(&state->vm);
 	return instance;
+}
+
+wac_obj_bound_t* wac_obj_bound_init(wac_state_t *state, wac_value_t receiver, wac_obj_closure_t *method) {
+	wac_obj_bound_t *bound = WAC_OBJ_ALLOC(wac_obj_bound_t, WAC_OBJ_BOUND);
+	bound->receiver = receiver;
+	bound->method = method;
+	return bound;
 }
 
 void wac_obj_free(wac_state_t *state, wac_obj_t *obj) {
@@ -164,12 +177,10 @@ void wac_obj_free(wac_state_t *state, wac_obj_t *obj) {
 			WAC_FREE(state, wac_obj_string_t, obj);
 			break;
 		}
-		case WAC_OBJ_FUN: {
-			wac_obj_fun_t *fun = (wac_obj_fun_t*)obj;
-			wac_page_free(state, &fun->page);
+		case WAC_OBJ_FUN:
+			wac_page_free(state, &((wac_obj_fun_t*)obj)->page);
 			WAC_FREE(state, wac_obj_fun_t, obj);
 			break;
-		}
 		case WAC_OBJ_NATIVE:
 			WAC_FREE(state, wac_obj_native_t, obj);
 			break;
@@ -182,13 +193,16 @@ void wac_obj_free(wac_state_t *state, wac_obj_t *obj) {
 		case WAC_OBJ_UPVAL:
 			WAC_FREE(state, wac_obj_upval_t, obj);
 			break;
-		case WAC_OBJ_CLASS: {
+		case WAC_OBJ_CLASS:
+			wac_table_free(state, &((wac_obj_class_t*)obj)->methods);
 			WAC_FREE(state, wac_obj_class_t, obj);
 			break;
-		}
 		case WAC_OBJ_INSTANCE:
 			wac_table_free(state, &((wac_obj_instance_t*)obj)->fields);
 			WAC_FREE(state, wac_obj_instance_t, obj);
+			break;
+		case WAC_OBJ_BOUND:
+			WAC_FREE(state, wac_obj_bound_t, obj);
 			break;
 	}
 }

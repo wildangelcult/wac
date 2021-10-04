@@ -14,6 +14,7 @@ typedef enum wac_obj_type_e {
 	WAC_OBJ_UPVAL,
 	WAC_OBJ_CLASS,
 	WAC_OBJ_INSTANCE,
+	WAC_OBJ_BOUND,
 } wac_obj_type_t;
 
 struct wac_obj_s {
@@ -63,6 +64,7 @@ typedef struct wac_obj_closure_s {
 typedef struct wac_obj_class_s {
 	wac_obj_t obj;
 	wac_obj_string_t *name;
+	wac_table_t methods;
 } wac_obj_class_t;
 
 typedef struct wac_obj_instance_s {
@@ -70,6 +72,12 @@ typedef struct wac_obj_instance_s {
 	wac_obj_class_t *klass;
 	wac_table_t fields;
 } wac_obj_instance_t;
+
+typedef struct wac_obj_bound_s {
+	wac_obj_t obj;
+	wac_value_t receiver;
+	wac_obj_closure_t *method;
+} wac_obj_bound_t;
 
 #define WAC_OBJ_TYPE(value) (WAC_VAL_AS_OBJ(value)->type)
 
@@ -79,6 +87,7 @@ typedef struct wac_obj_instance_s {
 #define WAC_OBJ_IS_CLOSURE(value) wac_obj_isType(value, WAC_OBJ_CLOSURE)
 #define WAC_OBJ_IS_CLASS(value) wac_obj_isType(value, WAC_OBJ_CLASS)
 #define WAC_OBJ_IS_INSTANCE(value) wac_obj_isType(value, WAC_OBJ_INSTANCE)
+#define WAC_OBJ_IS_BOUND(value) wac_obj_isType(value, WAC_OBJ_BOUND)
 
 #define WAC_OBJ_AS_STRING(value) ((wac_obj_string_t*)WAC_VAL_AS_OBJ(value))
 #define WAC_OBJ_AS_FUN(value) ((wac_obj_fun_t*)WAC_VAL_AS_OBJ(value))
@@ -86,6 +95,7 @@ typedef struct wac_obj_instance_s {
 #define WAC_OBJ_AS_CLOSURE(value) ((wac_obj_closure_t*)WAC_VAL_AS_OBJ(value))
 #define WAC_OBJ_AS_CLASS(value) ((wac_obj_class_t*)WAC_VAL_AS_OBJ(value))
 #define WAC_OBJ_AS_INSTANCE(value) ((wac_obj_instance_t*)WAC_VAL_AS_OBJ(value))
+#define WAC_OBJ_AS_BOUND(value) ((wac_obj_bound_t*)WAC_VAL_AS_OBJ(value))
 
 static inline bool wac_obj_isType(wac_value_t value, wac_obj_type_t type) {
 	return WAC_VAL_IS_OBJ(value) && WAC_OBJ_TYPE(value) == type;
@@ -99,6 +109,7 @@ wac_obj_closure_t* wac_obj_closure_init(wac_state_t *state, wac_obj_fun_t *fun);
 wac_obj_upval_t* wac_obj_upval_init(wac_state_t *state, wac_value_t *loc);
 wac_obj_class_t* wac_obj_class_init(wac_state_t *state, wac_obj_string_t *name);
 wac_obj_instance_t* wac_obj_instance_init(wac_state_t *state, wac_obj_class_t *klass);
+wac_obj_bound_t* wac_obj_bound_init(wac_state_t *state, wac_value_t receiver, wac_obj_closure_t *method);
 void wac_obj_free(wac_state_t *state, wac_obj_t *obj);
 
 #endif //__WAC_OBJECT_H

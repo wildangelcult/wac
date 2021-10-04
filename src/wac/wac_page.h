@@ -13,6 +13,7 @@ typedef enum wac_opCode_e {
 	WAC_OP_FALSE,
 	WAC_OP_CLOSURE,
 	WAC_OP_CLASS,
+	WAC_OP_METHOD,
 
 	WAC_OP_POP,
 	WAC_OP_POPN,
@@ -44,6 +45,7 @@ typedef enum wac_opCode_e {
 	WAC_OP_JMP_FALSE,
 
 	WAC_OP_CALL,
+	WAC_OP_INVOKE,
 
 	WAC_OP_RET,
 } wac_opCode_t;

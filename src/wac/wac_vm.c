@@ -18,11 +18,12 @@
 static wac_interpretResult_t wac_vm_run(wac_state_t *state);
 
 void wac_defineNativeFun(wac_state_t *state, uint32_t arity, const char *name, wac_native_fun_t fun) {
-	wac_vm_push(&state->vm, WAC_VAL_OBJ(wac_obj_string_copy(state, name, strlen(name))));
-	wac_vm_push(&state->vm, WAC_VAL_OBJ(wac_obj_native_init(state, arity, WAC_OBJ_AS_STRING(state->vm.stack[0]), fun)));
-	wac_table_set(state, &state->vm.globals, WAC_OBJ_AS_STRING(state->vm.stack[0]), state->vm.stack[1]);
-	wac_vm_pop(&state->vm);
-	wac_vm_pop(&state->vm);
+	wac_vm_t *vm = &state->vm;
+	wac_vm_push(vm, WAC_VAL_OBJ(wac_obj_string_copy(state, name, strlen(name))));
+	wac_vm_push(vm, WAC_VAL_OBJ(wac_obj_native_init(state, arity, WAC_OBJ_AS_STRING(vm->stack[0]), fun)));
+	wac_table_set(state, &vm->globals, WAC_OBJ_AS_STRING(vm->stack[0]), vm->stack[1]);
+	wac_vm_pop(vm);
+	wac_vm_pop(vm);
 }
 
 static void wac_vm_stack_reset(wac_vm_t *vm) {
@@ -79,8 +80,11 @@ void wac_vm_init(wac_state_t *state) {
 
 	//coz the gc loops over vm->strings
 	vm->strings.asize = 0;
+	vm->initString = NULL;
+
 	wac_table_init(state, &vm->globals);
 	wac_table_init(state, &vm->strings);
+	vm->initString = wac_obj_string_copy(state, "init", 4);
 
 	vm->frames_asize = WAC_ARRAY_DEFAULT_SIZE;
 	vm->frames = WAC_ARRAY_INIT(state, wac_frame_t, vm->frames_asize);
@@ -172,31 +176,44 @@ static bool wac_vm_call(wac_state_t *state, wac_obj_closure_t *closure, uint32_t
 }
 
 static bool wac_vm_call_value(wac_state_t *state, wac_value_t callee, uint32_t argc) {
+	wac_vm_t *vm = &state->vm;
 	if (WAC_VAL_IS_OBJ(callee)) {
 		switch (WAC_OBJ_TYPE(callee)) {
 			case WAC_OBJ_NATIVE: {
 				wac_obj_native_t *native = WAC_OBJ_AS_NATIVE(callee);
 				if (native->arity != argc) {
-					wac_vm_error(&state->vm, "Expected %u arguments, but got %u", native->arity, argc);
+					wac_vm_error(vm, "Expected %u arguments, but got %u", native->arity, argc);
 					return false;
 				}
-				wac_value_t result = native->fun(argc, state->vm.sp - argc);
-				state->vm.sp -= argc + 1;
-				wac_vm_push(&state->vm, result);
+				wac_value_t result = native->fun(argc, vm->sp - argc);
+				vm->sp -= argc + 1;
+				wac_vm_push(vm, result);
 				return true;
 			}
 			case WAC_OBJ_CLOSURE:
 				return wac_vm_call(state, WAC_OBJ_AS_CLOSURE(callee), argc);
 			case WAC_OBJ_CLASS: {
 				wac_obj_class_t *klass = WAC_OBJ_AS_CLASS(callee);
-				state->vm.sp[-argc - 1] = WAC_VAL_OBJ(wac_obj_instance_init(state, klass));
+				vm->sp[-argc - 1] = WAC_VAL_OBJ(wac_obj_instance_init(state, klass));
+				wac_value_t init;
+				if (wac_table_get(&klass->methods, vm->initString, &init)) {
+					return wac_vm_call(state, WAC_OBJ_AS_CLOSURE(init), argc);
+				} else if (argc) {
+					wac_vm_error(vm, "Expected 0 arguments, but got %u", argc);
+					return false;
+				}
 				return true;
+			}
+			case WAC_OBJ_BOUND: {
+				wac_obj_bound_t *bound = WAC_OBJ_AS_BOUND(callee);
+				vm->sp[-argc - 1] = bound->receiver;
+				return wac_vm_call(state, bound->method, argc);
 			}
 			default:
 				break;
 		}
 	}
-	wac_vm_error(&state->vm, "You can only call functions and classes");
+	wac_vm_error(vm, "You can only call functions and classes");
 	return false;
 }
 
@@ -234,14 +251,71 @@ static void wac_vm_closeUpvals(wac_vm_t *vm, wac_value_t *last) {
 	}
 }
 
+//nameStack is set to true when we call from WAC_OP_GET_PROPERTY
+static bool wac_vm_bindMethod(wac_state_t *state, wac_obj_class_t *klass, wac_obj_string_t *name, bool nameStack) {
+	wac_vm_t *vm = &state->vm;
+	wac_value_t method;
+	wac_obj_bound_t *bound;
+
+	if (!wac_table_get(&klass->methods, name, &method)) {
+		wac_vm_error(vm, "Undefined property '%s'", name->buf);
+		return false;
+	}
+
+	bound = wac_obj_bound_init(state, wac_vm_peek(vm, nameStack ? 1 : 0), WAC_OBJ_AS_CLOSURE(method));
+	if (nameStack) wac_vm_pop(vm);
+	wac_vm_pop(vm);
+	wac_vm_push(vm, WAC_VAL_OBJ(bound));
+	return true;
+}
+
+static bool wac_vm_invokeFromClass(wac_state_t *state, wac_obj_class_t *klass, uint32_t argc) {
+	wac_vm_t *vm = &state->vm;
+	wac_obj_string_t *name = WAC_OBJ_AS_STRING(wac_vm_peek(vm, argc));
+	wac_value_t method;
+	if (!wac_table_get(&klass->methods, name, &method)) {
+		wac_vm_error(vm, "Undefined property '%s'", name->buf);
+		return false;
+	}
+	for (wac_value_t *value = vm->sp - (argc + 1); value < (vm->sp - 1); ++value) {
+		*value = value[1];
+	}
+	--vm->sp;
+
+	return wac_vm_call(state, WAC_OBJ_AS_CLOSURE(method), argc);
+}
+
+static bool wac_vm_invoke(wac_state_t *state, uint32_t argc) {
+	wac_vm_t *vm = &state->vm;
+	wac_value_t field;
+	if (!WAC_OBJ_IS_INSTANCE(wac_vm_peek(vm, argc + 1))) {
+		wac_vm_error(vm, "Only instances have methods");
+		return false;
+	}
+
+	wac_obj_instance_t *instance = WAC_OBJ_AS_INSTANCE(wac_vm_peek(vm, argc + 1));
+
+	if (wac_table_get(&instance->fields, WAC_OBJ_AS_STRING(wac_vm_peek(vm, argc)), &field)) {
+		vm->sp[-argc - 2] = field;
+		for (wac_value_t *value = vm->sp - (argc + 1); value < (vm->sp - 1); ++value) {
+			*value = value[1];
+		}
+		--vm->sp;
+		return wac_vm_call_value(state, field, argc);
+	}
+
+	return wac_vm_invokeFromClass(state, instance->klass, argc);
+}
+
 wac_interpretResult_t wac_interpret(wac_state_t *state, const char *src) {
+	wac_vm_t *vm = &state->vm;
 	wac_obj_fun_t *fun = wac_compiler_compile(state, src);
 	if (!fun) return WAC_INTERPRET_COMPILE_ERROR;
 	
-	wac_vm_push(&state->vm, WAC_VAL_OBJ(fun));
+	wac_vm_push(vm, WAC_VAL_OBJ(fun));
 	wac_obj_closure_t *closure = wac_obj_closure_init(state, fun);
-	wac_vm_pop(&state->vm);
-	wac_vm_push(&state->vm, WAC_VAL_OBJ(closure));
+	wac_vm_pop(vm);
+	wac_vm_push(vm, WAC_VAL_OBJ(closure));
 	wac_vm_call(state, closure, 0);
 
 	return wac_vm_run(state);
@@ -312,6 +386,10 @@ static wac_interpretResult_t wac_vm_run(wac_state_t *state) {
 			case WAC_OP_CLASS:
 				wac_vm_push(vm, WAC_VAL_OBJ(wac_obj_class_init(state, WAC_READ_STRING())));
 				break;
+			case WAC_OP_METHOD:
+				wac_table_set(state, &WAC_OBJ_AS_CLASS(wac_vm_peek(vm, 1))->methods, WAC_READ_STRING(), wac_vm_peek(vm, 0));
+				wac_vm_pop(vm);
+				break;
 			case WAC_OP_POP:
 				wac_vm_pop(vm);
 				break;
@@ -367,7 +445,7 @@ static wac_interpretResult_t wac_vm_run(wac_state_t *state) {
 					return WAC_INTERPRET_RUNTIME_ERROR;
 				}
 				if (!WAC_OBJ_IS_STRING(wac_vm_peek(vm, 0))) {
-					wac_vm_error(vm, "You can only use string to access properties");
+					wac_vm_error(vm, "You can only use strings to access properties");
 					return WAC_INTERPRET_RUNTIME_ERROR;
 				}
 				wac_obj_instance_t *instance = WAC_OBJ_AS_INSTANCE(wac_vm_peek(vm, 1));
@@ -379,8 +457,11 @@ static wac_interpretResult_t wac_vm_run(wac_state_t *state) {
 					wac_vm_push(vm, value);
 					break;
 				}
-				wac_vm_error(vm, "Undefined property '%s'", name->buf);
-				return WAC_INTERPRET_RUNTIME_ERROR;
+
+				if (!wac_vm_bindMethod(state, instance->klass, name, true)) {
+					return WAC_INTERPRET_RUNTIME_ERROR;
+				}
+				break;
 			}
 			case WAC_OP_SET_PROPERTY: {
 				if (!WAC_OBJ_IS_INSTANCE(wac_vm_peek(vm, 2))) {
@@ -388,7 +469,7 @@ static wac_interpretResult_t wac_vm_run(wac_state_t *state) {
 					return WAC_INTERPRET_RUNTIME_ERROR;
 				}
 				if (!WAC_OBJ_IS_STRING(wac_vm_peek(vm, 1))) {
-					wac_vm_error(vm, "You can only use string to access fields");
+					wac_vm_error(vm, "You can only use strings to access fields");
 					return WAC_INTERPRET_RUNTIME_ERROR;
 				}
 				wac_obj_instance_t *instance = WAC_OBJ_AS_INSTANCE(wac_vm_peek(vm, 2));
@@ -404,7 +485,7 @@ static wac_interpretResult_t wac_vm_run(wac_state_t *state) {
 				wac_vm_pop(vm);
 				break;
 			case WAC_OP_DEFINE_GLOBAL:
-				wac_table_set(state, &vm->globals, WAC_READ_STRING(), wac_vm_peek(&state->vm, 0));
+				wac_table_set(state, &vm->globals, WAC_READ_STRING(), wac_vm_peek(vm, 0));
 				wac_vm_pop(vm);
 				break;
 			case WAC_OP_NOT:
@@ -478,6 +559,12 @@ static wac_interpretResult_t wac_vm_run(wac_state_t *state) {
 				frame = &vm->frames[vm->frames_usize - 1];
 				break;
 			}
+			case WAC_OP_INVOKE:
+				if (!wac_vm_invoke(state, WAC_READ_4_BYTES())) {
+					return WAC_INTERPRET_RUNTIME_ERROR;
+				}
+				frame = &vm->frames[vm->frames_usize - 1];
+				break;
 			case WAC_OP_RET: {
 				wac_value_t result = wac_vm_pop(vm);
 				wac_vm_closeUpvals(vm, frame->bp);

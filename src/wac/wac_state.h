@@ -14,6 +14,7 @@ struct wac_state_s {
 	wac_scanner_t scanner;
 	wac_parser_t parser;
 	wac_compiler_t *compiler;
+	wac_class_compiler_t *classCompiler;
 };
 
 wac_state_t* wac_state_init();

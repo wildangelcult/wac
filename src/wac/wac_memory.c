@@ -44,28 +44,31 @@ static void wac_gc_mark_table(wac_vm_t *vm, wac_table_t *table) {
 }
 
 static void wac_gc_mark_roots(wac_state_t *state) {
+	wac_vm_t *vm = &state->vm;
 	size_t i;
 	wac_value_t *value;
 	wac_obj_upval_t *upval;
 	wac_compiler_t *compiler;
 
-	for (value = state->vm.stack; value < state->vm.sp; ++value) {
-		wac_gc_mark_value(&state->vm, *value);
+	for (value = vm->stack; value < vm->sp; ++value) {
+		wac_gc_mark_value(vm, *value);
 	}
 
-	for (i = 0; i < state->vm.frames_usize; ++i) {
-		wac_gc_mark_obj(&state->vm, (wac_obj_t*)state->vm.frames[i].closure);
+	for (i = 0; i < vm->frames_usize; ++i) {
+		wac_gc_mark_obj(vm, (wac_obj_t*)vm->frames[i].closure);
 	}
 
-	for (upval = state->vm.openUpvals; upval; upval = upval->next) {
-		wac_gc_mark_obj(&state->vm, (wac_obj_t*)upval);
+	for (upval = vm->openUpvals; upval; upval = upval->next) {
+		wac_gc_mark_obj(vm, (wac_obj_t*)upval);
 	}
 
-	wac_gc_mark_table(&state->vm, &state->vm.globals);
+	wac_gc_mark_table(vm, &vm->globals);
 
 	for (compiler = state->compiler; compiler; compiler = compiler->prev) {
-		wac_gc_mark_obj(&state->vm, (wac_obj_t*)compiler->fun);
+		wac_gc_mark_obj(vm, (wac_obj_t*)compiler->fun);
 	}
+
+	wac_gc_mark_obj(vm, (wac_obj_t*)vm->initString);
 }
 
 static void wac_gc_mark_valarr(wac_vm_t *vm, wac_valarr_t *arr) {
@@ -106,12 +109,19 @@ static void wac_gc_blacken(wac_vm_t *vm, wac_obj_t *obj) {
 		case WAC_OBJ_CLASS: {
 			wac_obj_class_t *klass = (wac_obj_class_t*)obj;
 			wac_gc_mark_obj(vm, (wac_obj_t*)klass->name);
+			wac_gc_mark_table(vm, &klass->methods);
 			break;
 		}
 		case WAC_OBJ_INSTANCE: {
 			wac_obj_instance_t *instance = (wac_obj_instance_t*)obj;
 			wac_gc_mark_obj(vm, (wac_obj_t*)instance->klass);
 			wac_gc_mark_table(vm, &instance->fields);
+			break;
+		}
+		case WAC_OBJ_BOUND: {
+			wac_obj_bound_t *bound = (wac_obj_bound_t*)obj;
+			wac_gc_mark_value(vm, bound->receiver);
+			wac_gc_mark_obj(vm, (wac_obj_t*)bound->method);
 			break;
 		}
 	}

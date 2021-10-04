@@ -25,6 +25,7 @@ struct wac_vm_s {
 
 	wac_table_t globals;
 	wac_table_t strings;
+	wac_obj_string_t *initString;
 	wac_obj_upval_t *openUpvals;
 	wac_obj_t *objs;
 

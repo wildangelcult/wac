@@ -54,6 +54,7 @@ static void wac_parser_or(wac_state_t *state, bool canAssign);
 static void wac_parser_call(wac_state_t *state, bool canAssign);
 static void wac_parser_dot(wac_state_t *state, bool canAssign);
 static void wac_parser_square(wac_state_t *state, bool canAssign);
+static void wac_parser_this(wac_state_t *state, bool canAssign);
 
 static wac_parser_rule_t wac_parser_rules[] = {
 	[WAC_TOKEN_LPAREN]		= {wac_parser_group,	wac_parser_call,	WAC_PREC_CALL},
@@ -84,7 +85,7 @@ static wac_parser_rule_t wac_parser_rules[] = {
 	[WAC_TOKEN_NUMBER]		= {wac_parser_number,	NULL,			WAC_PREC_NONE},
 	[WAC_TOKEN_VAR]			= {NULL,		NULL,			WAC_PREC_NONE},
 	[WAC_TOKEN_CLASS]		= {NULL,		NULL,			WAC_PREC_NONE},
-	[WAC_TOKEN_THIS]		= {NULL,		NULL,			WAC_PREC_NONE},
+	[WAC_TOKEN_THIS]		= {wac_parser_this,	NULL,			WAC_PREC_NONE},
 	[WAC_TOKEN_SUPER]		= {NULL,		NULL,			WAC_PREC_NONE},
 	[WAC_TOKEN_FUN]			= {NULL,		NULL,			WAC_PREC_NONE},
 	[WAC_TOKEN_RETURN]		= {NULL,		NULL,			WAC_PREC_NONE},
@@ -161,7 +162,12 @@ static void wac_compiler_emit_5bytes(wac_state_t *state, uint8_t byte, uint32_t 
 }
 
 static void wac_compiler_emit_ret(wac_state_t *state) {
-	wac_compiler_emit_2bytes(state, WAC_OP_NULL, WAC_OP_RET);
+	if (state->compiler->type == WAC_FUN_TYPE_INIT) {
+		wac_compiler_emit_5bytes(state, WAC_OP_GET_LOCAL, 0);
+	} else {
+		wac_compiler_emit_byte(state, WAC_OP_NULL);
+	}
+	wac_compiler_emit_byte(state, WAC_OP_RET);
 }
 
 static void wac_compiler_emit_const(wac_state_t *state, uint8_t op, wac_value_t value) {
@@ -212,8 +218,13 @@ static void wac_compiler_init(wac_state_t *state, wac_compiler_t *compiler, wac_
 	local = &state->compiler->locals[state->compiler->locals_usize++];
 	local->depth = 0;
 	local->isCaptured = false;
-	local->name.start = "";
-	local->name.len = 0;
+	if (type != WAC_FUN_TYPE_FUN) {
+		local->name.start = "this";
+		local->name.len = 4;
+	} else {
+		local->name.start = "";
+		local->name.len = 0;
+	}
 }
 
 static wac_obj_fun_t* wac_compiler_end(wac_state_t *state) {
@@ -447,6 +458,9 @@ static void wac_parser_statement_ret(wac_state_t *state) {
 	if (wac_parser_match(state, WAC_TOKEN_SEMICOLON)) {
 		wac_compiler_emit_ret(state);
 	} else {
+		if (state->compiler->type == WAC_FUN_TYPE_INIT) {
+			wac_parser_error(&state->parser, "Can't return value from initializer");
+		}
 		wac_parser_expr(state);
 		wac_parser_eat(state, WAC_TOKEN_SEMICOLON, "Expected ';' after return value");
 		wac_compiler_emit_byte(state, WAC_OP_RET);
@@ -664,14 +678,44 @@ static void wac_parser_decl_fun(wac_state_t *state) {
 	wac_parser_var_define(state, var);
 }
 
+static void wac_parser_var_named(wac_state_t *state, bool canAssign, wac_token_t name);
+
+static void wac_parser_method(wac_state_t *state) {
+	wac_parser_eat(state, WAC_TOKEN_ID, "Expected method name");
+	uint32_t name = wac_parser_const_id(state, &state->parser.prev);
+
+	wac_fun_type_t type = WAC_FUN_TYPE_METHOD;
+	if (state->parser.prev.len == 4 && !memcmp(state->parser.prev.start, "init", 4)) {
+		type = WAC_FUN_TYPE_INIT;
+	}
+	wac_parser_function(state, type);
+
+	wac_compiler_emit_5bytes(state, WAC_OP_METHOD, name);
+}
+
 static void wac_parser_decl_class(wac_state_t *state) {
 	wac_parser_eat(state, WAC_TOKEN_ID, "Expected class name");
-	uint32_t name = wac_parser_const_id(state, &state->parser.prev);
+	wac_token_t nameToken = state->parser.prev;
+	uint32_t nameConst = wac_parser_const_id(state, &state->parser.prev);
 	wac_parser_decl_local(state);
-	wac_compiler_emit_5bytes(state, WAC_OP_CLASS, name);
-	wac_parser_var_define(state, name);
+	wac_compiler_emit_5bytes(state, WAC_OP_CLASS, nameConst);
+	wac_parser_var_define(state, nameConst);
+
+	wac_class_compiler_t classCompiler;
+	classCompiler.prev = state->classCompiler;
+	state->classCompiler = &classCompiler;
+
+	wac_parser_var_named(state, false, nameToken);
+
 	wac_parser_eat(state, WAC_TOKEN_LCURLY, "Expected '{' before class body");
+
+	while (!wac_parser_check(&state->parser, WAC_TOKEN_RCURLY) && !wac_parser_check(&state->parser, WAC_TOKEN_EOF)) {
+		wac_parser_method(state);
+	}
+
 	wac_parser_eat(state, WAC_TOKEN_RCURLY, "Expected '}' after class body");
+	wac_compiler_emit_byte(state, WAC_OP_POP);
+	state->classCompiler = state->classCompiler->prev;
 }
 
 static void wac_parser_decl(wac_state_t *state) {
@@ -759,6 +803,8 @@ static void wac_parser_dot(wac_state_t *state, bool canAssign) {
 	if (canAssign && wac_parser_match(state, WAC_TOKEN_EQUAL)) {
 		wac_parser_expr(state);
 		wac_compiler_emit_byte(state, WAC_OP_SET_PROPERTY);
+	} else if (wac_parser_match(state, WAC_TOKEN_LPAREN)) {
+		wac_compiler_emit_5bytes(state, WAC_OP_INVOKE, wac_parser_argc(state));
 	} else {
 		wac_compiler_emit_byte(state, WAC_OP_GET_PROPERTY);
 	}
@@ -774,6 +820,14 @@ static void wac_parser_square(wac_state_t *state, bool canAssign) {
 		wac_compiler_emit_byte(state, WAC_OP_GET_PROPERTY);
 	}
 	wac_parser_eat(state, WAC_TOKEN_RSQUARE, "Expected ']' after expresion");
+}
+
+static void wac_parser_this(wac_state_t *state, bool canAssign) {
+	if (!state->classCompiler) {
+		wac_parser_error(&state->parser, "Can't use this outside of a class");
+		return;
+	}
+	wac_parser_variable(state, false);
 }
 
 wac_obj_fun_t* wac_compiler_compile(wac_state_t *state, const char *src) {

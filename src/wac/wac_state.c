@@ -17,6 +17,7 @@ wac_state_t* wac_state_init() {
 		exit(1);
 	}
 	state->compiler = NULL;
+	state->classCompiler = NULL;
 
 	wac_vm_init(state);
 
